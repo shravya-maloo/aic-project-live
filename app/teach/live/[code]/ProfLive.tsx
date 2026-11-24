@@ -228,7 +228,7 @@ export default function ProfLive({ code, classCode, title, sub, nowMs, slides, l
             {mic === "on" ? "Recording" : mic === "denied" ? "Microphone blocked" : "Starting…"}
             <span className="muted mono" style={{ marginLeft: 8 }}>{fmtClock(now())}</span>
           </span>
-          <HelpButton role="professor" />
+          <HelpButton role="professor" light />
           <button className="btn red" onClick={stop} disabled={stopping}>{stopping ? "Saving…" : "Stop lecture"}</button>
         </div>
       </div>
