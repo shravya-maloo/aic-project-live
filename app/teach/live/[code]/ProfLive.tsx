@@ -1,4 +1,5 @@
 "use client";
+import HelpButton from "@/components/HelpButton";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { setLiveCount, stopLecture } from "@/app/actions";
 import { fmtClock, spacedCode } from "@/lib/format";
@@ -227,6 +228,7 @@ export default function ProfLive({ code, classCode, title, sub, nowMs, slides, l
             {mic === "on" ? "Recording" : mic === "denied" ? "Microphone blocked" : "Starting…"}
             <span className="muted mono" style={{ marginLeft: 8 }}>{fmtClock(now())}</span>
           </span>
+          <HelpButton role="professor" />
           <button className="btn red" onClick={stop} disabled={stopping}>{stopping ? "Saving…" : "Stop lecture"}</button>
         </div>
       </div>

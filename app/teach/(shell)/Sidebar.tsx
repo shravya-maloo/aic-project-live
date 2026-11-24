@@ -1,13 +1,17 @@
 "use client";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import HelpButton from "@/components/HelpButton";
 
 export default function Sidebar({ classes, name }: { classes: { code: string; short: string }[]; name: string }) {
   const path = usePathname();
   const current = path.match(/^\/teach\/([A-Z0-9]{6})/)?.[1];
   return (
     <aside className="side">
-      <Link className="brand" href="/teach">Lost <span>and found</span></Link>
+      <div className="brand-row">
+        <Link className="brand" href="/teach">Lost <span>and found</span></Link>
+        <HelpButton role="professor" />
+      </div>
       <h4>Classes</h4>
       {classes.map((c) => (
         <div key={c.code}>

@@ -54,10 +54,10 @@ function Insights({ v, hotspots, base }: { v: V; hotspots: H[]; base: string }) 
       <div className="card" style={{ marginTop: 18, padding: 22 }}>
         <div className="between">
           <h3>Where students were lost</h3>
-          <span className="small muted">Students per 30 seconds</span>
+          <span className="small muted">Students who tapped Lost · dark bars are hotspots</span>
         </div>
         <div style={{ marginTop: 18 }}>
-          <ConfusionCurve buckets={ins.buckets} duration={v.lecture.duration_ms} peaks={hotspots.map((h) => ({ start_ms: h.start_ms, end_ms: h.end_ms, students: h.students }))} height={150} playhead={false} />
+          <ConfusionCurve buckets={ins.buckets} duration={v.lecture.duration_ms} peaks={hotspots.map((h) => ({ start_ms: h.start_ms, end_ms: h.end_ms, students: h.students, label: h.concept }))} height={170} playhead={false} />
         </div>
       </div>
       <div className="stack-lg" style={{ marginTop: 18 }}>
@@ -180,7 +180,7 @@ function Recording({ v, hotspots }: { v: V; hotspots: H[] }) {
           <span className="small" style={{ color: "#cfcaf5" }}>1× speed</span>
         </div>
         <div style={{ marginTop: 18 }}>
-          <ConfusionCurve buckets={v.insights?.buckets ?? []} duration={v.lecture.duration_ms} dark height={60} showAxis={false} />
+          <ConfusionCurve buckets={v.insights?.buckets ?? []} duration={v.lecture.duration_ms} peaks={hotspots.map((h) => ({ start_ms: h.start_ms, end_ms: h.end_ms, students: h.students, label: h.concept }))} dark height={80} />
         </div>
       </div>
       <div style={{ display: "grid", gridTemplateColumns: "minmax(0,1fr) 270px", gap: 20, marginTop: 20 }} className="live-grid">

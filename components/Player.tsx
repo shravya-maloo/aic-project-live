@@ -204,29 +204,24 @@ export function TranscriptList({ lines, hot }: { lines: { start_ms: number; text
   );
 }
 
-// ---------- the confusion curve ----------
+// ---------- the confusion chart ----------
+// Bars per minute (per 30 s for short lectures): how many students tapped Lost
+// then. Hotspots are highlighted and labelled, your own moments sit under the
+// bars, and hovering or tapping a bar says exactly what it means.
 
-/** Smooths bucket counts (light Gaussian) and draws a monotone curve through them. */
-function curvePath(points: [number, number][]): string {
-  if (points.length < 2) return "";
-  const n = points.length;
-  const dx = points.map((p, i) => (i < n - 1 ? points[i + 1][0] - p[0] : 0));
-  const slope = points.map((p, i) => (i < n - 1 ? (points[i + 1][1] - p[1]) / dx[i] : 0));
-  const m = points.map((_, i) => (i === 0 ? slope[0] : i === n - 1 ? slope[n - 2] : slope[i - 1] * slope[i] <= 0 ? 0 : (slope[i - 1] + slope[i]) / 2));
-  let d = `M${points[0][0]},${points[0][1]}`;
-  for (let i = 0; i < n - 1; i++) {
-    const [x0, y0] = points[i];
-    const [x1, y1] = points[i + 1];
-    const h = dx[i] / 3;
-    d += ` C${x0 + h},${y0 + m[i] * h} ${x1 - h},${y1 - m[i + 1] * h} ${x1},${y1}`;
-  }
-  return d;
+interface Peak { start_ms: number; end_ms: number; students: number; label?: string; badge?: string }
+
+function niceMax(v: number) {
+  if (v <= 4) return 4;
+  // Even steps, so the middle gridline is a whole number of students.
+  const step = v <= 10 ? 2 : v <= 20 ? 4 : v <= 50 ? 10 : 20;
+  return Math.ceil(v / step) * step;
 }
 
 export function ConfusionCurve({
   buckets,
   duration,
-  height = 120,
+  height = 140,
   mine = [],
   peaks = [],
   dark,
@@ -237,83 +232,113 @@ export function ConfusionCurve({
   duration: number;
   height?: number;
   mine?: number[];
-  peaks?: { start_ms: number; end_ms: number; students: number }[];
+  peaks?: Peak[];
   dark?: boolean;
   showAxis?: boolean;
   playhead?: boolean;
 }) {
   const p = usePlayer();
-  const W = 1000;
-  const top = peaks.length ? 26 : 8;
-  const H = height;
-  const base = H - 6;
+  const [hover, setHover] = useState<number | null>(null);
   const dur = Math.max(duration, 1);
-  // Gaussian smoothing over ±3 buckets (±90 s) so peaks read like a "most replayed" curve.
-  const W7 = [0.05, 0.1, 0.2, 0.3, 0.2, 0.1, 0.05];
-  const vals = buckets.map((_, i) => W7.reduce((s, w, j) => s + (buckets[i + j - 3]?.students ?? 0) * w, 0));
-  const max = Math.max(1, ...vals, ...peaks.map((x) => x.students * 0.6));
-  const pts: [number, number][] = [[0, base], ...buckets.map((b, i): [number, number] => [((b.start_ms + 15_000) / dur) * W, base - (vals[i] / max) * (base - top)]), [W, base]];
-  const line = curvePath(pts);
-  const fillC = dark ? "rgba(160,150,255,0.45)" : "rgba(100,87,230,0.22)";
-  const lineC = dark ? "rgba(190,182,255,0.9)" : "var(--violet)";
-  const x = (ms: number) => (Math.min(ms, dur) / dur) * W;
-  const click = (e: React.MouseEvent<SVGSVGElement>) => {
-    if (!p) return;
-    const r = e.currentTarget.getBoundingClientRect();
-    const ms = ((e.clientX - r.left) / r.width) * dur;
-    // Snap to a nearby peak, so "tap a peak to jump there" is forgiving.
-    const near = peaks.find((pk) => Math.abs((pk.start_ms + pk.end_ms) / 2 - ms) < dur * 0.04);
-    p.seek(near ? near.start_ms : ms);
-  };
+  const binMs = dur > 20 * 60_000 ? 60_000 : 30_000;
+  const bins = useMemo(() => {
+    const n = Math.max(1, Math.ceil(dur / binMs));
+    const out = Array.from({ length: n }, (_, i) => ({ start: i * binMs, students: 0 }));
+    // Each 30-second bucket counts a student once; a bin shows its busiest 30 seconds.
+    for (const b of buckets) {
+      const k = Math.min(n - 1, Math.floor(b.start_ms / binMs));
+      out[k].students = Math.max(out[k].students, b.students);
+    }
+    return out;
+  }, [buckets, dur, binMs]);
+  const top = niceMax(Math.max(0, ...bins.map((b) => b.students)));
+  const ticks = [0, top / 2, top];
+  const pctX = (ms: number) => `${(Math.min(Math.max(ms, 0), dur) / dur) * 100}%`;
+  const inPeak = (b: { start: number }) => peaks.findIndex((pk) => b.start + binMs > pk.start_ms && b.start < pk.end_ms);
+  const empty = bins.every((b) => b.students === 0);
+  const step = dur > 60 * 60_000 ? 15 : dur > 25 * 60_000 ? 10 : 5;
+  const xTicks: number[] = [];
+  for (let m = 0; m * 60_000 <= dur; m += step) xTicks.push(m * 60_000);
+  const h = bins[hover ?? -1];
+  const hp = h ? inPeak(h) : -1;
+  const seek = (ms: number) => p?.seek(ms);
+  const peakTop = peaks.length ? 30 : 6;
+
   return (
-    <div>
-      <svg
-        viewBox={`0 0 ${W} ${H + 10}`}
-        preserveAspectRatio="none"
-        width="100%"
-        height={H + 10}
-        onClick={click}
-        style={{ cursor: p ? "pointer" : undefined, display: "block", overflow: "visible" }}
-        role="img"
-        aria-label="Where students tapped Lost across the lecture"
-      >
-        {peaks.map((pk, i) => (
-          <rect key={i} x={x(pk.start_ms)} y={top - 4} width={Math.max(8, x(pk.end_ms) - x(pk.start_ms))} height={base - top + 4} fill={dark ? "rgba(255,255,255,0.06)" : "rgba(100,87,230,0.09)"} />
-        ))}
-        <path d={`${line} L${W},${base} L0,${base} Z`} fill={fillC} />
-        <path d={line} fill="none" stroke={lineC} strokeWidth={3} vectorEffect="non-scaling-stroke" />
-        <line x1={0} x2={W} y1={base} y2={base} stroke={lineC} strokeWidth={2} vectorEffect="non-scaling-stroke" />
-        {p && playhead && p.t > 0 && (
-          <>
-            <line x1={0} x2={x(p.t)} y1={base} y2={base} stroke="var(--gold)" strokeWidth={4} vectorEffect="non-scaling-stroke" />
-          </>
-        )}
-      </svg>
-      {/* Labels and dots in HTML so they don't stretch with the SVG. */}
-      <div style={{ position: "relative", height: 0 }}>
-        {peaks.map((pk, i) => (
-          <span key={i} className="tiny bold" style={{ position: "absolute", left: `${(x((pk.start_ms + pk.end_ms) / 2) / W) * 100}%`, top: -(H + 10) + 2, transform: "translateX(-50%)", color: dark ? "#fff" : "var(--text)" }}>
-            {pk.students}
-          </span>
-        ))}
-        {mine.map((ms, i) => (
-          <span
-            key={i}
-            title={`You tapped Lost at ${fmtClock(ms)}`}
-            style={{ position: "absolute", left: `${(x(ms) / W) * 100}%`, top: -22, width: 13, height: 13, borderRadius: "50%", background: "var(--gold)", border: "2px solid #fff", transform: "translateX(-50%)" }}
-          />
-        ))}
-        {p && playhead && p.t > 0 && (
-          <span style={{ position: "absolute", left: `${(x(p.t) / W) * 100}%`, top: -21, width: 14, height: 14, borderRadius: "50%", background: "var(--gold)", transform: "translateX(-50%)", boxShadow: "0 0 0 3px rgba(243,179,62,0.3)" }} />
-        )}
+    <div className={`cchart ${dark ? "dark" : ""}`} onMouseLeave={() => setHover(null)}>
+      <div className="cchart-plot" style={{ height, paddingTop: peakTop }}>
+        {/* y gridlines + labels */}
+        {showAxis &&
+          ticks.map((t) => (
+            <div key={t} className="cchart-grid" style={{ bottom: `${(t / top) * height}px` }}>
+              <span>{t}</span>
+            </div>
+          ))}
+        {peaks.map((pk, i) => {
+          const mid = (pk.start_ms + pk.end_ms) / 2;
+          return (
+            <button
+              key={i}
+              type="button"
+              className="cchart-peak"
+              style={{ left: pctX(mid) }}
+              onClick={() => seek(pk.start_ms)}
+              title={`${pk.label ? pk.label + ": " : ""}${pk.badge ?? `${pk.students} students`} lost, ${fmtClock(pk.start_ms)}–${fmtClock(pk.end_ms)}`}
+            >
+              {(pk.badge ?? `${pk.students} lost`) && <b>{pk.badge ?? `${pk.students} lost`}</b>}
+              {pk.label && <span className="pk-name">{pk.label}</span>}
+            </button>
+          );
+        })}
+        <div className="cchart-bars" style={{ height }} role="img" aria-label={empty ? "No one tapped Lost in this lecture" : `Students who tapped Lost, per ${binMs === 60_000 ? "minute" : "30 seconds"}. Highest: ${Math.max(...bins.map((b) => b.students))} students.`}>
+          {bins.map((b, i) => {
+            const pk = inPeak(b);
+            return (
+              <button
+                key={i}
+                type="button"
+                className={`cchart-bar ${pk >= 0 ? "hot" : ""} ${hover === i ? "on" : ""}`}
+                onMouseEnter={() => setHover(i)}
+                onFocus={() => setHover(i)}
+                onClick={() => {
+                  setHover(i);
+                  seek(pk >= 0 ? Math.max(peaks[pk].start_ms, b.start) : b.start);
+                }}
+                aria-label={`${fmtClock(b.start)}: ${b.students} student${b.students === 1 ? "" : "s"} lost`}
+              >
+                <span style={{ height: b.students ? `max(3px, ${(b.students / top) * 100}%)` : 0 }} />
+              </button>
+            );
+          })}
+          {p && playhead && p.t > 0 && <span className="cchart-head" style={{ left: pctX(p.t) }} />}
+          {empty && <p className="cchart-empty">No one tapped Lost in this lecture.</p>}
+        </div>
       </div>
-      {showAxis && (
-        <div className="between tiny" style={{ marginTop: 8, color: dark ? "#d6d2f6" : "var(--muted)" }}>
-          <span>0:00</span>
-          <span>{fmtAxis(dur / 2)}</span>
-          <span>{fmtAxis(dur)}</span>
+      {mine.length > 0 && (
+        <div className="cchart-mine" aria-label="Your Lost moments">
+          {mine.map((ms, i) => (
+            <button key={i} type="button" style={{ left: pctX(ms) }} onClick={() => seek(ms)} title={`You tapped Lost at ${fmtClock(ms)}`} aria-label={`You tapped Lost at ${fmtClock(ms)}`} />
+          ))}
         </div>
       )}
+      {showAxis && (
+        <div className="cchart-x">
+          {xTicks.map((t) => (
+            <span key={t} style={{ left: pctX(t), transform: t === 0 ? "none" : t > dur * 0.93 ? "translateX(-100%)" : undefined }}>{fmtAxis(t)}</span>
+          ))}
+        </div>
+      )}
+      <p className="cchart-read" aria-live="polite">
+        {h ? (
+          <>
+            <b className="mono">{fmtClock(h.start)}–{fmtClock(Math.min(dur, h.start + binMs))}</b> · {h.students} student{h.students === 1 ? "" : "s"} tapped Lost
+            {hp >= 0 && peaks[hp].label ? ` · hotspot: ${peaks[hp].label}` : ""}
+            {p ? " · tap to play from here" : ""}
+          </>
+        ) : (
+          <>Each bar is {binMs === 60_000 ? "one minute" : "30 seconds"}; taller means more students were lost. Hover or tap a bar for details.</>
+        )}
+      </p>
     </div>
   );
 }

@@ -1,4 +1,5 @@
 "use client";
+import HelpButton from "@/components/HelpButton";
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { fmtClock } from "@/lib/format";
@@ -155,7 +156,10 @@ export default function LiveLecture({ code, title, sub, classCode, nowMs, dark }
             <span className="dot" style={{ marginRight: 8 }} />
             Live<span className="clock mono">{fmtClock(now())}</span>
           </span>
-          <Link href={classCode ? `/app/class/${classCode}` : "/app"}>Leave</Link>
+          <span className="row" style={{ gap: 12 }}>
+            <HelpButton role="student" light={dark} />
+            <Link href={classCode ? `/app/class/${classCode}` : "/app"}>Leave</Link>
+          </span>
         </div>
         <p className="live-sub">{sub}</p>
         <h1>{title}</h1>

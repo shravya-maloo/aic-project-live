@@ -148,6 +148,7 @@ export async function studentDashboard(user: User) {
         lost: ev.length,
         fuzzy: ev.filter((e) => e.status === "fuzzy").length,
         got_it: ev.filter((e) => e.status === "got_it").length,
+        marks: [...ev].sort((a, b) => a.t_ms - b.t_ms).map((e) => (e.status === "got_it" || e.status === "fuzzy" ? e.status : "open") as "got_it" | "fuzzy" | "open"),
       };
     });
   const plans = await Promise.all(mine.slice(0, 4).map((c) => studyView(user, c.code)));
@@ -166,6 +167,7 @@ export async function studentDashboard(user: User) {
       lost: myEvents.length,
       fuzzy: myEvents.filter((e) => e.status === "fuzzy").length,
       got_it: myEvents.filter((e) => e.status === "got_it").length,
+      open: myEvents.filter((e) => e.status !== "got_it" && e.status !== "fuzzy").length,
     },
     recent,
     study_next,

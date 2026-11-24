@@ -67,15 +67,22 @@ export default function LectureReplay({ v, start }: { v: V; start: number }) {
           <PlayButton />
           <div>
             <h3>Where the class got lost</h3>
-            <p className="small muted">Tap a peak to jump there</p>
+            <p className="small muted">Tap a bar to play from that moment</p>
           </div>
         </div>
         <div style={{ marginTop: 18 }}>
-          <ConfusionCurve buckets={v.buckets} duration={v.lecture.duration_ms} mine={v.moments.map((m) => m.t_ms)} height={90} />
+          <ConfusionCurve
+            buckets={v.buckets}
+            duration={v.lecture.duration_ms}
+            mine={v.moments.map((m) => m.t_ms)}
+            peaks={v.hotspots.map((h) => ({ start_ms: h.start_ms, end_ms: h.end_ms, students: h.students, label: h.concept, badge: h.share_label.replace(" of class", "") }))}
+            height={110}
+          />
         </div>
         <div className="row small" style={{ marginTop: 12, gap: 16 }}>
-          <span className="legend"><span style={{ width: 18, height: 11, borderRadius: 3, background: "rgba(100,87,230,0.22)", border: "1.5px solid var(--violet)" }} />Class</span>
-          <span className="legend"><span className="dot" style={{ background: "var(--gold)" }} />Your moments</span>
+          <span className="legend"><span style={{ width: 12, height: 12, borderRadius: 3, background: "#c9c3fb" }} />Classmates lost</span>
+          <span className="legend"><span style={{ width: 12, height: 12, borderRadius: 3, background: "var(--violet)" }} />Hotspot</span>
+          <span className="legend"><span style={{ width: 0, height: 0, borderLeft: "6px solid transparent", borderRight: "6px solid transparent", borderBottom: "10px solid var(--gold)" }} />When you tapped Lost</span>
         </div>
         <NoAudioNote deleteOn={v.lecture.audio_delete_on} />
       </div>
